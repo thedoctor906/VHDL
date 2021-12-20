@@ -1,0 +1,151 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use ieee.numeric_std.all;
+
+
+entity jul2021_test is
+
+
+Port ( SW0, SW1, SW2, SW3 : in std_logic;
+       CLK,CLR  : in std_logic;
+       anod : out std_logic_vector(3 downto 0);
+       sseg : out unsigned(6 downto 0);
+       knapp : in std_logic;
+       b : in std_logic_vector(3 downto 0);
+       p : out std_logic_vector(4 downto 0)
+       );
+end jul2021_test;
+
+
+architecture arch of jul2021_test is
+
+signal count : unsigned (29 downto 0);
+signal bcd0 : unsigned (3 downto 0);
+signal bcd1 : unsigned (3 downto 0);
+signal bcd2 : unsigned (3 downto 0);
+signal mux_out : unsigned (3 downto 0);
+signal seven_segment : unsigned (6 downto 0);
+signal counter_in : std_logic_vector (1 downto 0);
+signal dec_ut : std_logic_vector(3 downto 0);
+signal sel : unsigned(1 downto 0);
+signal bin : unsigned (7 downto 0);
+signal BCDin : std_logic_vector (3 downto 0);
+type state_type is (ST0, ST1, ST2, ST3);
+signal state, state_nxt : state_type;
+signal siffra0, siffra1, siffra2, siffra3 : std_logic_vector (3 downto 0);
+
+begin
+
+ p(4) <= (b(3) and b(2)) or (b(3) and b(1));
+ p(3) <= (b(3) and not b(2) and not b(1));
+ p(2) <= (not b(3) and b(2)) or (b(2) and b(1));
+ p(1) <= (b(3) and b(2) and not b(1)) or (not b(3) and b(1));
+ p(0) <= b(0);
+ 
+
+sync_proc: process(CLK,CLR)
+begin
+    if (CLR ='1') then
+        state <= ST0;
+    elsif (rising_edge(CLK)) then
+        state <= state_nxt;
+    end if;
+end process sync_proc;
+
+comb_proc: process(state,knapp)
+begin
+
+    case state is 
+        when ST0 =>
+            if (knapp ='1') then
+                siffra0 <= (SW0, SW1, SW2, SW3);
+                siffra0 <= b;
+                BCDin <= b;
+                counter_in <= (SW0, SW1);
+                state_nxt <= ST1;
+            end if;
+        when ST1 =>
+            if (knapp ='1') then
+                siffra1 <= (SW0, SW1, SW2, SW3);
+                siffra1 <= b;
+                BCDin <= b;
+                counter_in <= (SW0, SW1);
+                state_nxt <= ST2;
+            end if;
+        when ST2 =>
+            if (knapp ='1') then
+                siffra2 <= (SW0, SW1, SW2, SW3);
+                siffra2 <= b;
+                BCDin <= b;
+                counter_in <= (SW0, SW1);
+                state_nxt <= ST3;
+            end if;
+        when ST3 =>
+            if (knapp ='1') then
+                siffra3 <= (SW0, SW1, SW2, SW3);
+                siffra3 <= b;
+                BCDin <= b;
+                counter_in <= (SW0, SW1);
+            end if;                 
+       when others => 
+            state_nxt <= ST0;
+    end case;
+end process comb_proc;
+
+
+process(BCDin)--BCD_TO_7SEG
+                    begin
+                     
+                    case BCDin is
+                    when "0000" =>
+                    Seven_Segment <= "0000001"; --0
+                    when "0001" =>
+                    Seven_Segment <= "1001111"; --1
+                    when "0010" =>
+                    Seven_Segment <= "0010010"; --2
+                    when "0011" =>
+                    Seven_Segment <= "0000110"; --3
+                    when "0100" =>
+                    Seven_Segment <= "1001100"; --4
+                    when "0101" =>
+                    Seven_Segment <= "0100100"; --5
+                    when "0110" =>
+                    Seven_Segment <= "0100000"; --6
+                    when "0111" =>
+                    Seven_Segment <= "0001111"; --7
+                    when "1000" =>
+                    Seven_Segment <= "0000000"; --8
+                    when "1001" =>
+                    Seven_Segment <= "0000100"; --9
+                    when others =>
+                    Seven_Segment <= "1111111"; --blank
+                    end case;
+                     
+                    end process;
+                  
+
+
+process(dec_ut, counter_in)
+                        begin
+                                if (Counter_in = "00") then
+                                    Dec_ut <= "1110";
+                                elsif (counter_in = "01") then 
+                                    Dec_ut <= "1101";
+                                elsif (counter_in = "10") then
+                                    Dec_ut <= "1011";
+                                else 
+                                    Dec_ut <= "1111";
+                                end if;
+                                 
+end process;        
+anod <= dec_ut;
+sseg <= seven_segment;
+
+
+
+
+
+
+
+
+end arch;
