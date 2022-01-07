@@ -1,0 +1,216 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use ieee.numeric_std.all;
+
+
+entity jul2021_test is
+
+
+Port (SW0,SW1,SW2,SW3: in std_logic;
+       CLK,CLR  : in std_logic;
+       anod : out std_logic_vector(3 downto 0);
+       sseg : out unsigned(6 downto 0);
+       btnU : in std_logic;
+       LEDS : out std_logic_vector (15 downto 0);
+       piezo : out std_logic
+       );
+end jul2021_test;
+
+
+architecture arch of jul2021_test is
+
+--signal count : unsigned (29 downto 0);
+--signal bcd0 : unsigned (3 downto 0);
+--signal bcd1 : unsigned (3 downto 0);
+--signal bcd2 : unsigned (3 downto 0);
+--signal mux_out : unsigned (3 downto 0);
+signal seven_segment : unsigned (6 downto 0);
+signal counter_in : std_logic_vector (1 downto 0);
+signal dec_ut : std_logic_vector(3 downto 0);
+signal sel : unsigned(1 downto 0);
+signal bin : unsigned (7 downto 0);
+signal BCDin : std_logic_vector (3 downto 0);
+type state_type is (ST0, ST1, ST2, ST3, ST4, ST5, ST6, ST7, ST8);
+signal state, state_nxt : state_type;
+signal code_check : std_logic_vector (15 downto 0);
+signal db_tick1 : std_logic;
+signal db_level : std_logic;
+--signal piezo_sig : unsigned;
+signal count : unsigned(27 downto 0);
+signal t_cnt : unsigned(27 downto 0);
+--:= (others => '0');
+--signal count_sig: unsigned(27 downto 0);
+
+--piezo <= piezo_sig;
+
+component debounce is
+       port ( btnU, CLK, CLR : in std_logic;
+               db_level, db_tick1 : out std_logic
+               );
+end component;
+
+begin
+debouncer: debounce port map (
+btnU => btnU,
+CLR => CLR,
+CLK => CLK,
+db_tick1 => db_tick1,
+db_level => db_level
+);
+-- p(4) <= (b(3) and b(2)) or (b(3) and b(1));
+-- p(3) <= (b(3) and not b(2) and not b(1));
+-- p(2) <= (not b(3) and b(2)) or (b(2) and b(1));
+ --p(1) <= (b(3) and b(2) and not b(1)) or (not b(3) and b(1));
+-- p(0) <= b(0);
+
+sync_proc: process(CLK,CLR)
+
+begin
+    if (CLR ='1') then
+        state <= ST0;
+    elsif (rising_edge(CLK)) then
+        state <= state_nxt;
+        --t_cnt <= t_cnt + 1;
+    end if;
+    
+end process sync_proc;
+
+count <= t_cnt;
+
+counter: process(CLK)
+begin
+if(rising_edge(CLK)) then
+if (state = ST5) then
+t_cnt <= t_cnt + 1;
+elsif (state = ST7) then
+t_cnt <= t_cnt + 1;
+else
+t_cnt <= (others=> '0');
+end if;
+end if;
+end process;
+comb_proc: process(state,db_tick1,SW0,SW1,SW2,SW3,counter_in,BCDin, code_check)
+begin
+    piezo <= '0';
+    LEDS <= "0000000000000000" ;
+    case state is 
+        when ST0 => 
+            if (db_tick1 ='1') then
+                BCDin <= (SW0&SW1&SW2&SW3);
+                code_check (15 downto 12) <= (SW0&SW1&SW2&SW3);
+                dec_ut <= "1110";
+                state_nxt <= ST1;
+            else state_nxt <= ST0;
+            end if;
+        when ST1 =>
+            if (db_tick1='1') then
+                BCDin <= (SW0&SW1&SW2&SW3);
+                code_check (11 downto 8) <= (SW0&SW1&SW2&SW3);
+                dec_ut <= "1110";
+                state_nxt <= ST2;
+            else state_nxt <= ST1;
+            end if;
+        when ST2 =>
+            if (db_tick1 ='1') then
+                BCDin <= (SW0&SW1&SW2&SW3);
+                code_check (7 downto 4) <= (SW0&SW1&SW2&SW3);
+                dec_ut <= "1110";
+                state_nxt <= ST3;
+            else state_nxt <= ST2;
+            end if;
+        when ST3 =>
+            if (db_tick1 ='1') then
+                BCDin <= (SW0&SW1&SW2&SW3);
+                code_check (3 downto 0) <= (SW0&SW1&SW2&SW3);
+                dec_ut <= "1110";
+                state_nxt <= ST4;
+            else state_nxt <= ST3;
+            end if;      
+        when ST4 =>
+            if (code_check = "0001000100010001") then
+            state_nxt <= ST5;
+            --state_nxt <= ST0;
+            else
+            state_nxt <= ST7;
+            end if;
+        
+        when ST5 =>
+        if (CLR = '1')  then
+        LEDS <= "0000000000000000" ;
+        state_nxt <= ST0 ;
+        elsif (count(27) = '0') then
+         piezo <= count(15);
+         LEDS <= "1111111111111111" ;
+         state_nxt <= ST5;
+        elsif (count(27) = '1') then
+        state_nxt <= ST6;
+        end if;
+
+        when ST6 => 
+        if (CLR = '0')  then     
+        LEDS <= "1111111111111111" ;
+        state_nxt <= ST6;
+        elsif (CLR = '1') then
+        LEDS <= "0000000000000000" ;
+        state_nxt <= ST0;
+        end if;
+        
+        
+ when ST7 =>
+       if (count(27) = '0') then
+       piezo <= count(17);
+       LEDS <= "0000000000000000" ;
+       state_nxt <= ST7;
+       else
+       state_nxt <= ST8; 
+       end if;
+       
+       when ST8 => 
+       if (CLR = '0')  then     
+       LEDS <= "0000000000000000" ;
+       state_nxt <= ST0;
+       else
+       state_nxt <= ST0;
+       end if;
+    end case;
+    
+end process comb_proc;
+
+process(BCDin)--BCD_TO_7SEG
+                    begin
+                     
+                    case BCDin is
+                    when "0000" =>
+                    Seven_Segment <= "0000001"; --0
+                    when "0001" =>
+                    Seven_Segment <= "1001111"; --1
+                    when "0010" =>
+                    Seven_Segment <= "0010010"; --2
+                    when "0011" =>
+                    Seven_Segment <= "0000110"; --3
+                    when "0100" =>
+                    Seven_Segment <= "1001100"; --4
+                    when "0101" =>
+                    Seven_Segment <= "0100100"; --5
+                    when "0110" =>
+                    Seven_Segment <= "0100000"; --6
+                    when "0111" =>
+                    Seven_Segment <= "0001111"; --7
+                    when "1000" =>
+                    Seven_Segment <= "0000000"; --8
+                    when "1001" =>
+                    Seven_Segment <= "0000100"; --9
+                    when others =>
+                    Seven_Segment <= "1111111"; --blank
+                    end case;
+                     
+                    end process;
+--piezo <= piezo_sig;                        
+anod <= dec_ut;
+sseg <= seven_segment;
+
+
+
+
+
+
